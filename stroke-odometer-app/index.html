@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stroke Odometer</title>
+<meta name="description" content="Private session tracker that turns strokes into meters. Your data stays on your device.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EDF1F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C141C" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Odometer">
+<style>
+@font-face { font-family: 'Bricolage Grotesque'; font-weight: 700; font-style: normal; font-display: swap; src: url(fonts/bricolage-grotesque-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 400; font-style: normal; font-display: swap; src: url(fonts/dm-sans-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 500; font-style: normal; font-display: swap; src: url(fonts/dm-sans-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 600; font-style: normal; font-display: swap; src: url(fonts/dm-sans-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-style: normal; font-display: swap; src: url(fonts/jetbrains-mono-latin-700-normal.woff2) format('woff2'); }
+
+/* Base reset (the artifact host used to supply this) */
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+/* Layout: one column on phones; at desktop width the live tracker sits left and the stats, weekly chart and history sit right. Dial styled like a mechanical trip odometer. */
+:root {
+  --bg: #EDF1F4;
+  --surface: #FFFFFF;
+  --surface-2: #E4EAEF;
+  --line: #CFD8DF;
+  --fg: #13202B;
+  --muted: #55687A;
+  --accent: #07786E;
+  --accent-fg: #FFFFFF;
+  --accent-deep: #055149;
+  --bar-past: #86CFC7;
+  --gold: #9A5B00;
+  --danger: #B3362B;
+  --dial-bg: #13202B;
+  --dial-fg: #F3F7FA;
+  --font-display: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-num: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C141C;
+    --surface: #131E29;
+    --surface-2: #1B2937;
+    --line: #27394A;
+    --fg: #E7EEF4;
+    --muted: #8CA1B3;
+    --accent: #3DD6C6;
+    --accent-fg: #06211F;
+    --accent-deep: #1E8F85;
+    --bar-past: #1F7A72;
+    --gold: #F2B84B;
+    --danger: #FF8A7D;
+    --dial-bg: #070D13;
+    --dial-fg: #E7EEF4;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C141C;
+  --surface: #131E29;
+  --surface-2: #1B2937;
+  --line: #27394A;
+  --fg: #E7EEF4;
+  --muted: #8CA1B3;
+  --accent: #3DD6C6;
+  --accent-fg: #06211F;
+  --accent-deep: #1E8F85;
+  --bar-past: #1F7A72;
+  --gold: #F2B84B;
+  --danger: #FF8A7D;
+  --dial-bg: #070D13;
+  --dial-fg: #E7EEF4;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 560px; margin: 0 auto; }
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.col { display: grid; gap: 16px; min-width: 0; }
+@media (min-width: 880px) {
+  .wrap { max-width: 1000px; }
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; line-height: 1.1; letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; letter-spacing: -0.005em; margin: 0; }
+.label { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+.chip { flex: none; font-size: .75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.note { margin: 0; color: var(--muted); font-size: .85rem; }
+.notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); color: var(--fg); font-size: .85rem; }
+
+/* Dial */
+.status { display: inline-flex; align-items: center; gap: 8px; }
+.pip { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pip.run { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.pip.pause { background: var(--gold); }
+@keyframes pulse { 50% { opacity: .35; } }
+.dial { display: flex; align-items: center; gap: 5px; font-family: var(--font-num); font-weight: 700; font-size: clamp(2rem, 10.5vw, 3.2rem); margin: 12px 0 14px; max-width: 100%; overflow: hidden; }
+.cell { position: relative; flex: none; width: .72em; height: 1.3em; overflow: hidden; border-radius: 6px; background: var(--dial-bg); color: var(--dial-fg); }
+.cell::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.4), transparent 28%, transparent 72%, rgba(0,0,0,.4)); pointer-events: none; }
+.cell.dec { background: var(--accent); color: var(--accent-fg); }
+.strip { display: flex; flex-direction: column; transform: translateY(calc(var(--d, 0) * -1.3em)); transition: transform .35s cubic-bezier(.3, .7, .2, 1); }
+.strip span { height: 1.3em; display: grid; place-items: center; line-height: 1; }
+.dp { width: .2em; text-align: center; color: var(--muted); }
+.unit { font-family: var(--font-display); font-size: .42em; color: var(--muted); margin-left: 4px; align-self: flex-end; padding-bottom: .5em; }
+
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric .val { font-family: var(--font-num); font-weight: 700; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+
+.tap {
+  width: 100%; min-height: 112px; border: 0; border-radius: 18px;
+  background: var(--accent); color: var(--accent-fg);
+  display: grid; place-items: center; align-content: center; gap: 2px;
+  font-family: var(--font-display); font-weight: 700; font-size: 2rem; letter-spacing: -0.01em;
+  cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 6px 0 var(--accent-deep);
+  transition: transform .06s, box-shadow .06s;
+}
+.tap small { font-family: var(--font-body); font-size: .8rem; font-weight: 500; opacity: .85; letter-spacing: 0; }
+.tap:active, .tap.down { transform: translateY(4px); box-shadow: 0 2px 0 var(--accent-deep); }
+.tap:focus-visible, .btn:focus-visible, input:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.btn { flex: 1 1 auto; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); font: 600 .9rem var(--font-body); cursor: pointer; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn.danger { color: var(--danger); background: transparent; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Pacer */
+.play { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 12px; align-items: stretch; }
+.play .tap { min-height: 184px; height: 100%; }
+.pacer { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.track { position: relative; flex: 1 1 auto; width: 56px; min-height: 140px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--accent); opacity: .55; }
+.handle { position: absolute; left: 6px; right: 6px; top: calc(4px + var(--p, 0) * (100% - 26px)); height: 18px; border-radius: 8px; background: var(--accent); box-shadow: 0 2px 0 var(--accent-deep); }
+.pacer-note { margin: 12px 0 0; }
+
+/* Settings */
+.stepper { display: flex; align-items: stretch; gap: 8px; margin: 10px 0 10px; }
+.stepper .btn { flex: none; width: 48px; padding: 0; font-size: 1.2rem; }
+.field { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 0 14px; }
+.field input { flex: 1 1 auto; min-width: 0; width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--fg); font-family: var(--font-num); font-weight: 700; font-size: 1.15rem; text-align: right; }
+.field span { color: var(--muted); font-weight: 600; }
+
+/* Auto tempo */
+.switch { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; min-height: 44px; }
+.switch input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.tempo-read { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
+.tempo-read .big { font-family: var(--font-num); font-weight: 700; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.slider { display: block; width: 100%; min-height: 44px; margin: 0; accent-color: var(--accent); }
+.scale { display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+
+.install-btn { flex: none; min-height: 36px; padding: 0 14px; }
+.backup { margin-top: 14px; }
+.help { margin-top: 16px; }
+.help summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.help p { margin: 8px 0 0; }
+.help ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: .85rem; }
+.help li { margin-top: 4px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Stats */
+.hero-stat { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 4px 0 14px; }
+.hero-stat .big { font-family: var(--font-num); font-weight: 700; font-size: 2.2rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.grid2 .val { font-family: var(--font-num); font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.pbs { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.pbs li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pbs li:last-child { border-bottom: 0; padding-bottom: 0; }
+.pbs .v { font-family: var(--font-num); font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Chart */
+.chart { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--font-body); }
+.chart .val { fill: var(--fg); font-size: 9.5px; font-weight: 600; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.chart .day { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+.chart .day.today { fill: var(--fg); font-weight: 700; }
+.chart .bar { fill: var(--bar-past); }
+.chart .bar.today { fill: var(--accent); }
+.chart .zero { fill: var(--line); }
+.chart .base { stroke: var(--line); stroke-width: 1; }
+
+/* History */
+.hist { margin: 0; padding: 0; list-style: none; }
+.hist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: center; }
+.hist li:first-child { border-top: 0; padding-top: 0; }
+.hist .when { font-weight: 600; }
+.hist .meta { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.hist .m { font-family: var(--font-num); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.hist .del { grid-column: 2; justify-self: end; min-height: 32px; padding: 0 10px; border: 0; background: transparent; color: var(--muted); font: 600 .78rem var(--font-body); cursor: pointer; border-radius: 8px; }
+.hist .del.confirm { color: var(--danger); background: var(--surface-2); }
+.empty { color: var(--muted); margin: 0; }
+
+.toast { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); margin-inline: auto; width: fit-content; max-width: 100%; padding: 12px 16px; border-radius: 12px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: .9rem; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
+.toast.show { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .strip, .tap, .toast { transition: none; }
+  .pip.run { animation: none; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div>
+      <h1>Stroke Odometer</h1>
+      <p class="sub">Private distance log. Stays in this browser.</p>
+    </div>
+    <span class="chip" id="sampleChip" hidden>Sample data</span>
+    <button class="btn install-btn" id="installBtn" type="button" hidden>Install app</button>
+  </header>
+
+  <p class="notice" id="storageNotice" hidden>This browser is blocking storage, so your log will be lost when you close the page.</p>
+
+  <div class="layout">
+    <div class="col">
+      <section class="card" aria-label="Current session">
+        <div class="card-head">
+          <span class="label">Distance this session</span>
+          <span class="status label"><span class="pip" id="pip"></span><span id="statusText">Ready</span></span>
+        </div>
+        <div class="dial" id="dial" role="img" aria-label="0.0 meters"></div>
+
+        <div class="metrics">
+          <div class="metric"><div class="label">Strokes</div><div class="val" id="mStrokes">0</div></div>
+          <div class="metric"><div class="label">Time</div><div class="val" id="mTime">0:00</div></div>
+          <div class="metric"><div class="label">Per minute</div><div class="val" id="mPace">&ndash;</div></div>
+        </div>
+
+        <div class="play">
+          <button class="tap" id="tap" type="button" aria-label="Add one stroke">Tap<small>+1 stroke</small></button>
+          <div class="pacer" aria-hidden="true">
+            <span class="label">Top</span>
+            <div class="track" id="track"><div class="handle"></div></div>
+            <span class="label">Bottom</span>
+          </div>
+        </div>
+        <p class="note pacer-note" id="pacerNote"></p>
+
+        <div class="row">
+          <button class="btn" id="toggle" type="button">Start timer</button>
+          <button class="btn" id="undo" type="button">Undo</button>
+          <button class="btn primary" id="finish" type="button">Finish &amp; save</button>
+        </div>
+      </section>
+
+      <section class="card" aria-label="Auto tempo">
+        <div class="card-head"><h2>Tempo</h2><span class="note">Sets the guide bar and auto count</span></div>
+        <label class="switch" for="autoOn"><input id="autoOn" type="checkbox">Count strokes automatically</label>
+        <div class="tempo-read"><span class="big" id="tempoVal">1.00 /sec</span><span class="note" id="tempoSub"></span></div>
+        <input class="slider" id="tempo" type="range" min="0.25" max="4" step="0.05" value="1" aria-label="Tempo in beats per second">
+        <div class="scale"><span>0.25 /sec</span><span>4 /sec</span></div>
+        <label class="switch" for="sound"><input id="sound" type="checkbox">Click on each beat</label>
+        <p class="note">Counting runs while the timer runs. Tapping still adds a stroke on top.</p>
+      </section>
+
+      <section class="card" aria-label="Settings">
+        <div class="card-head"><h2>Stroke length</h2></div>
+        <div class="stepper">
+          <button class="btn" id="lenDown" type="button" aria-label="Decrease stroke length">&minus;</button>
+          <label class="field" for="strokeCm"><input id="strokeCm" type="number" inputmode="decimal" min="1" max="60" step="0.5" value="15"><span>cm</span></label>
+          <button class="btn" id="lenUp" type="button" aria-label="Increase stroke length">+</button>
+        </div>
+        <p class="note">Distance is strokes times stroke length. Measure one full stroke once, enter it here, and every session uses it. Saved sessions keep the length they were logged with.</p>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card" aria-label="Totals">
+        <div class="label">Lifetime distance</div>
+        <div class="hero-stat"><span class="big" id="sLife">0 m</span></div>
+        <div class="grid2">
+          <div><div class="label">Sessions</div><div class="val" id="sCount">0</div></div>
+          <div><div class="label">Total strokes</div><div class="val" id="sStrokes">0</div></div>
+        </div>
+        <div class="label" style="margin-bottom:6px">Personal bests</div>
+        <ul class="pbs">
+          <li><span>Longest distance</span><span class="v" id="pbDist">&ndash;</span></li>
+          <li><span>Longest session</span><span class="v" id="pbTime">&ndash;</span></li>
+          <li><span>Fastest pace</span><span class="v" id="pbPace">&ndash;</span></li>
+        </ul>
+      </section>
+
+      <section class="card" aria-label="Last 7 days">
+        <div class="card-head"><h2>Last 7 days</h2><span class="note" id="weekTotal"></span></div>
+        <svg class="chart" id="chart" viewBox="0 0 336 150" role="img" aria-label="Meters per day for the last 7 days"></svg>
+      </section>
+
+      <section class="card" aria-label="Recent sessions">
+        <div class="card-head"><h2>Recent sessions</h2><span class="note" id="histNote"></span></div>
+        <ul class="hist" id="hist"></ul>
+        <div class="row backup">
+          <button class="btn" id="exportBtn" type="button">Export backup</button>
+          <button class="btn" id="importBtn" type="button">Import backup</button>
+          <input class="visually-hidden" id="importFile" type="file" accept="application/json,.json" tabindex="-1" aria-label="Choose a backup file">
+        </div>
+        <div class="row" id="eraseRow"><button class="btn danger" id="erase" type="button">Erase all data</button></div>
+      </section>
+    </div>
+  </div>
+
+  <details class="card help">
+    <summary>Install on your phone and keep your data safe</summary>
+    <p class="note">There are no accounts. Everything is stored on this device and nothing is sent anywhere.</p>
+    <ul>
+      <li><strong>iPhone:</strong> open in Safari, tap Share, then Add to Home Screen. Do this, because Safari can clear data from sites you have not opened in about a week.</li>
+      <li><strong>Android:</strong> open in Chrome, then use the menu and tap Install app.</li>
+      <li>The installed app and the browser tab keep separate data on some phones. Use Export backup and Import backup to move it.</li>
+      <li>Export a backup now and then. Clearing browser data or changing phones erases the log otherwise.</li>
+    </ul>
+  </details>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var KEY = 'stroke-odometer.v1';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { strokeCm: 15, auto: { on: false, tempo: 1 }, sessions: [], live: { strokes: 0, accMs: 0, segStart: null, startedAt: null } };
+  var storageOk = true;
+  var tickTimer = null, wake = null, toastTimer = null, pendingDelete = null, pendingTimer = null, pendingErase = false, eraseTimer = null;
+  var lastTick = null, phase = 0, raf = 0, lastSave = 0, beatTimer = null, audio = null, soundOn = false;
+
+  function valid(s) {
+    return s && isFinite(s.meters) && isFinite(s.durationSec) && isFinite(s.strokes) && isFinite(s.start);
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      var p = JSON.parse(raw);
+      if (!p || typeof p !== 'object') return;
+      if (typeof p.strokeCm === 'number' && p.strokeCm >= 1 && p.strokeCm <= 60) state.strokeCm = p.strokeCm;
+      if (Array.isArray(p.sessions)) state.sessions = p.sessions.filter(valid);
+      if (p.auto && typeof p.auto === 'object') {
+        state.auto.on = !!p.auto.on;
+        if (isFinite(p.auto.tempo)) state.auto.tempo = clampTempo(+p.auto.tempo);
+      }
+      if (p.live && typeof p.live === 'object') {
+        state.live = {
+          strokes: Math.max(0, p.live.strokes | 0),
+          accMs: Math.max(0, +p.live.accMs || 0),
+          segStart: null,
+          startedAt: p.live.startedAt || null
+        };
+      }
+    } catch (e) {}
+  }
+  function save() {
+    try {
+      var l = state.live;
+      localStorage.setItem(KEY, JSON.stringify({
+        strokeCm: state.strokeCm,
+        auto: state.auto,
+        sessions: state.sessions,
+        live: { strokes: l.strokes, accMs: elapsedMs(), segStart: null, startedAt: l.startedAt }
+      }));
+    }
+    catch (e) { if (storageOk) { storageOk = false; $('storageNotice').hidden = false; } }
+  }
+
+  /* formatting */
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h > 0 ? h + ':' + pad(m) + ':' + pad(s) : m + ':' + pad(s);
+  }
+  function fmtM(m) { return m >= 1000 ? (m / 1000).toFixed(2) + ' km' : m.toFixed(1) + ' m'; }
+  function fmtShort(v) { return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v >= 100 ? String(Math.round(v)) : v.toFixed(1); }
+  function fmtInt(n) { return Math.round(n).toLocaleString(); }
+
+  /* timer */
+  function elapsedMs() { var l = state.live; return l.accMs + (l.segStart ? Date.now() - l.segStart : 0); }
+  function running() { return !!state.live.segStart; }
+  function startSeg() {
+    var l = state.live;
+    if (l.segStart) return;
+    l.segStart = Date.now();
+    if (!l.startedAt) l.startedAt = Date.now();
+    lastTick = Date.now();
+    if (!tickTimer) tickTimer = setInterval(tick, 50);
+    if (!raf) raf = requestAnimationFrame(frame);
+    requestWake();
+  }
+  function pauseSeg() {
+    var l = state.live;
+    if (!l.segStart) return;
+    l.accMs += Date.now() - l.segStart;
+    l.segStart = null;
+    lastTick = null;
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    releaseWake();
+  }
+  function requestWake() {
+    try {
+      if (navigator.wakeLock && document.visibilityState === 'visible' && !wake) {
+        navigator.wakeLock.request('screen').then(function (w) {
+          wake = w;
+          w.addEventListener('release', function () { wake = null; });
+        }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  function releaseWake() { try { if (wake) { wake.release(); wake = null; } } catch (e) {} }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && running()) requestWake();
+  });
+
+  /* actions */
+  function tap() {
+    startSeg();
+    state.live.strokes++;
+    save();
+    renderLive();
+    try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {}
+  }
+  function undo() {
+    if (state.live.strokes > 0) { state.live.strokes--; save(); renderLive(); }
+  }
+  function toggle() {
+    if (running()) pauseSeg(); else startSeg();
+    save(); renderLive();
+  }
+  function finish() {
+    var l = state.live;
+    if (l.strokes === 0) { toast('Nothing to save yet. Tap to count a stroke first.'); return; }
+    pauseSeg();
+    phase = 0;
+    var dur = Math.round(l.accMs / 1000);
+    var s = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      start: l.startedAt || Date.now(),
+      durationSec: dur,
+      strokes: l.strokes,
+      cm: state.strokeCm,
+      meters: l.strokes * state.strokeCm / 100
+    };
+    state.sessions.push(s);
+    state.live = { strokes: 0, accMs: 0, segStart: null, startedAt: null };
+    save();
+    renderLive();
+    renderStats();
+    toast('Saved ' + fmtM(s.meters) + ' in ' + fmtDur(dur) + '.');
+  }
+  function setLen(v) {
+    if (!isFinite(v)) return;
+    v = Math.min(60, Math.max(1, Math.round(v * 2) / 2));
+    state.strokeCm = v;
+    $('strokeCm').value = v;
+    save();
+    renderLive();
+    renderAuto();
+  }
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  /* auto tempo */
+  function clampTempo(v) { return Math.min(4, Math.max(0.25, Math.round(v * 20) / 20)); }
+  function tick() {
+    var now = Date.now();
+    if (running() && lastTick !== null) {
+      var dt = Math.min(now - lastTick, 2000);
+      phase += dt * state.auto.tempo / 1000;
+      var n = Math.floor(phase);
+      if (n > 0) {
+        phase -= n;
+        if (state.auto.on) state.live.strokes += n;
+        beat();
+      }
+    }
+    lastTick = now;
+    renderLive();
+    if (now - lastSave > 1000) { lastSave = now; save(); }
+  }
+  /* The pacer bar is at the top at phase 0, at the bottom at 0.5, and a stroke lands each time it returns to the top. */
+  function livePhase() {
+    if (!running() || lastTick === null) return phase;
+    var dt = Math.min(Date.now() - lastTick, 2000);
+    return (phase + dt * state.auto.tempo / 1000) % 1;
+  }
+  function setPacer(ph) {
+    var p = (1 - Math.cos(2 * Math.PI * ph)) / 2;
+    $('track').style.setProperty('--p', p.toFixed(3));
+  }
+  function frame() {
+    setPacer(livePhase());
+    raf = running() ? requestAnimationFrame(frame) : 0;
+  }
+  function beat() {
+    var b = $('tap');
+    if (state.auto.on) {
+      b.classList.add('down');
+      clearTimeout(beatTimer);
+      beatTimer = setTimeout(function () { b.classList.remove('down'); }, 90);
+    }
+    if (soundOn && audio) {
+      try {
+        var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+        o.frequency.value = 1000;
+        g.gain.setValueAtTime(0.15, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+        o.connect(g); g.connect(audio.destination);
+        o.start(t); o.stop(t + 0.05);
+      } catch (e) {}
+    }
+  }
+  function renderAuto() {
+    var t = state.auto.tempo;
+    $('autoOn').checked = state.auto.on;
+    $('tempo').value = t;
+    $('tempoVal').textContent = t.toFixed(2) + ' /sec';
+    $('pacerNote').textContent = 'Follow the bar: one full stroke of ' + state.strokeCm + ' cm down and back up each beat, ' + t.toFixed(2) + ' per second. ' +
+      (state.auto.on ? 'A stroke is counted each time the bar reaches the top.' : 'Tap each time the bar reaches the top.');
+    $('tempoSub').textContent = Math.round(t * 60) + ' per min · ' + (t * 60 * state.strokeCm / 100).toFixed(1) + ' m/min';
+  }
+
+  /* dial */
+  function buildDial(n) {
+    var html = '';
+    for (var i = 0; i < n; i++) html += strip('');
+    html += '<span class="dp">.</span>' + strip(' dec') + '<span class="unit">m</span>';
+    $('dial').innerHTML = html;
+    $('dial').dataset.n = n;
+  }
+  function strip(cls) {
+    var s = '';
+    for (var d = 0; d < 10; d++) s += '<span>' + d + '</span>';
+    return '<span class="cell' + cls + '"><span class="strip">' + s + '</span></span>';
+  }
+  function renderDial(meters) {
+    var tenths = Math.floor(meters * 10 + 1e-6);
+    var intPart = Math.floor(tenths / 10), dec = tenths % 10;
+    var digits = String(intPart);
+    var n = Math.max(4, digits.length);
+    while (digits.length < n) digits = '0' + digits;
+    var dial = $('dial');
+    if (+dial.dataset.n !== n) buildDial(n);
+    var strips = dial.querySelectorAll('.strip');
+    for (var i = 0; i < n; i++) strips[i].style.setProperty('--d', digits.charAt(i));
+    strips[n].style.setProperty('--d', dec);
+    dial.setAttribute('aria-label', (tenths / 10).toFixed(1) + ' meters');
+  }
+
+  function renderLive() {
+    var l = state.live;
+    var meters = l.strokes * state.strokeCm / 100;
+    renderDial(meters);
+    setPacer(livePhase());
+    var ms = elapsedMs();
+    $('mStrokes').textContent = fmtInt(l.strokes);
+    $('mTime').textContent = fmtDur(ms / 1000);
+    $('mPace').textContent = ms >= 5000 && l.strokes > 0 ? fmtInt(l.strokes / (ms / 60000)) : '–';
+    var run = running(), started = l.strokes > 0 || l.accMs > 0;
+    $('pip').className = 'pip' + (run ? ' run' : started ? ' pause' : '');
+    $('statusText').textContent = run ? (state.auto.on ? 'Auto running' : 'Running') : started ? 'Paused' : 'Ready';
+    $('toggle').textContent = run ? 'Pause' : started ? 'Resume' : 'Start timer';
+    $('undo').disabled = l.strokes === 0;
+    $('finish').disabled = l.strokes === 0;
+  }
+
+  /* stats */
+  function demoSessions() {
+    var rows = [[6, 1260, 1900], [5, 840, 1150], [4, 1500, 2350], [3, 600, 780], [3, 1980, 3100], [1, 1320, 2040], [0, 540, 700]];
+    var now = Date.now();
+    return rows.map(function (r, i) {
+      return { id: 'demo' + i, start: now - r[0] * 86400000 - (i % 3) * 3600000, durationSec: r[1], strokes: r[2], cm: 15, meters: r[2] * 0.15 };
+    });
+  }
+  function dayKey(d) { return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+
+  function renderStats() {
+    var sample = state.sessions.length === 0;
+    var view = sample ? demoSessions() : state.sessions;
+    $('sampleChip').hidden = !sample;
+
+    var total = 0, strokes = 0, bestD = null, bestT = null, bestP = null;
+    view.forEach(function (s) {
+      total += s.meters; strokes += s.strokes;
+      if (!bestD || s.meters > bestD.meters) bestD = s;
+      if (!bestT || s.durationSec > bestT.durationSec) bestT = s;
+      if (s.durationSec >= 60) {
+        var p = s.meters / (s.durationSec / 60);
+        if (bestP === null || p > bestP) bestP = p;
+      }
+    });
+    $('sLife').textContent = fmtM(total);
+    $('sCount').textContent = view.length;
+    $('sStrokes').textContent = fmtInt(strokes);
+    $('pbDist').textContent = bestD ? fmtM(bestD.meters) : '–';
+    $('pbTime').textContent = bestT ? fmtDur(bestT.durationSec) : '–';
+    $('pbPace').textContent = bestP !== null ? bestP.toFixed(1) + ' m/min' : '–';
+
+    renderChart(view);
+    renderHist(view, sample);
+  }
+
+  function renderChart(view) {
+    var W = 336, base = 116, top = 34, slot = (W - 16) / 7, bw = 26;
+    var days = [], sums = {};
+    for (var i = 6; i >= 0; i--) {
+      var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      days.push(d); sums[dayKey(d)] = 0;
+    }
+    view.forEach(function (s) { var k = dayKey(new Date(s.start)); if (k in sums) sums[k] += s.meters; });
+    var vals = days.map(function (d) { return sums[dayKey(d)]; });
+    var max = Math.max.apply(null, vals.concat([1]));
+    var week = vals.reduce(function (a, b) { return a + b; }, 0);
+    $('weekTotal').textContent = fmtM(week) + ' total';
+
+    var out = '<line class="base" x1="8" x2="' + (W - 8) + '" y1="' + (base + 0.5) + '" y2="' + (base + 0.5) + '"/>';
+    days.forEach(function (d, i) {
+      var v = vals[i], cx = 8 + slot * i + slot / 2, x = cx - bw / 2, today = i === 6;
+      if (v > 0) {
+        var h = Math.max(3, v / max * (base - top)), y = base - h;
+        out += '<rect class="bar' + (today ? ' today' : '') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw + '" height="' + h.toFixed(1) + '" rx="4"/>';
+        out += '<text class="val" x="' + cx.toFixed(1) + '" y="' + (y - 5).toFixed(1) + '">' + fmtShort(v) + '</text>';
+      } else {
+        out += '<rect class="zero" x="' + x.toFixed(1) + '" y="' + (base - 2) + '" width="' + bw + '" height="2" rx="1"/>';
+      }
+      out += '<text class="day' + (today ? ' today' : '') + '" x="' + cx.toFixed(1) + '" y="136">' + d.toLocaleDateString(undefined, { weekday: 'short' }) + '</text>';
+    });
+    $('chart').innerHTML = out;
+  }
+
+  function renderHist(view, sample) {
+    var rows = view.slice().sort(function (a, b) { return b.start - a.start; }).slice(0, 8);
+    $('histNote').textContent = sample ? 'Sample sessions. Save one to replace them.' : (view.length > 8 ? 'Latest 8 of ' + view.length : '');
+    $('eraseRow').hidden = sample;
+    var html = '';
+    rows.forEach(function (s) {
+      var d = new Date(s.start);
+      var when = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      var spm = s.durationSec > 0 ? Math.round(s.strokes / (s.durationSec / 60)) : 0;
+      html += '<li><div><div class="when">' + when + '</div><div class="meta">' + fmtDur(s.durationSec) + ' &middot; ' + fmtInt(s.strokes) + ' strokes &middot; ' + spm + '/min</div></div>' +
+        '<div class="m">' + fmtM(s.meters) + '</div>';
+      if (!sample) {
+        var conf = pendingDelete === s.id;
+        html += '<button class="del' + (conf ? ' confirm' : '') + '" type="button" data-id="' + s.id + '">' + (conf ? 'Tap again to delete' : 'Delete') + '</button>';
+      }
+      html += '</li>';
+    });
+    $('hist').innerHTML = html;
+    var er = $('erase');
+    er.textContent = pendingErase ? 'Tap again to erase everything' : 'Erase all data';
+  }
+
+  /* events */
+  var tapBtn = $('tap');
+  tapBtn.addEventListener('pointerdown', function (e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    tapBtn.classList.add('down');
+    tap();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+    tapBtn.addEventListener(ev, function () { tapBtn.classList.remove('down'); });
+  });
+  tapBtn.addEventListener('click', function (e) { if (e.detail === 0) tap(); });
+  $('toggle').addEventListener('click', toggle);
+  $('undo').addEventListener('click', undo);
+  $('finish').addEventListener('click', finish);
+  $('lenDown').addEventListener('click', function () { setLen(state.strokeCm - 0.5); });
+  $('lenUp').addEventListener('click', function () { setLen(state.strokeCm + 0.5); });
+  $('strokeCm').addEventListener('change', function () { setLen(parseFloat(this.value)); });
+  $('hist').addEventListener('click', function (e) {
+    var b = e.target.closest('.del');
+    if (!b) return;
+    var id = b.getAttribute('data-id');
+    if (pendingDelete === id) {
+      state.sessions = state.sessions.filter(function (s) { return s.id !== id; });
+      pendingDelete = null;
+      save(); renderStats();
+    } else {
+      pendingDelete = id;
+      clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(function () { pendingDelete = null; renderStats(); }, 4000);
+      renderStats();
+    }
+  });
+  $('erase').addEventListener('click', function () {
+    if (pendingErase) {
+      pauseSeg();
+      state.sessions = [];
+      state.live = { strokes: 0, accMs: 0, segStart: null, startedAt: null };
+      pendingErase = false;
+      save(); renderLive(); renderStats();
+      toast('All data erased.');
+    } else {
+      pendingErase = true;
+      clearTimeout(eraseTimer);
+      eraseTimer = setTimeout(function () { pendingErase = false; renderStats(); }, 4000);
+      renderStats();
+    }
+  });
+
+  $('autoOn').addEventListener('change', function () {
+    state.auto.on = this.checked;
+    save(); renderLive(); renderAuto();
+  });
+  $('tempo').addEventListener('input', function () {
+    state.auto.tempo = clampTempo(parseFloat(this.value));
+    save(); renderAuto();
+  });
+  $('sound').addEventListener('change', function () {
+    soundOn = this.checked;
+    if (soundOn) {
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        audio.resume();
+      } catch (e) {}
+    }
+  });
+
+  load();
+  $('strokeCm').value = state.strokeCm;
+  renderLive();
+  renderAuto();
+  renderStats();
+
+  /* backup */
+  function ymd() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  $('exportBtn').addEventListener('click', function () {
+    if (!state.sessions.length) { toast('Nothing to export yet. Save a session first.'); return; }
+    var data = { app: 'stroke-odometer', version: 1, exported: new Date().toISOString(), strokeCm: state.strokeCm, sessions: state.sessions };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'stroke-odometer-backup-' + ymd() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    toast('Backup file created.');
+  });
+  $('importBtn').addEventListener('click', function () { $('importFile').click(); });
+  $('importFile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    var input = this;
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast('That file is too large to be a backup.'); input.value = ''; return; }
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var data = JSON.parse(r.result);
+        if (!data || data.app !== 'stroke-odometer' || !Array.isArray(data.sessions)) throw new Error('bad file');
+        var have = {};
+        state.sessions.forEach(function (s) { have[s.id] = true; });
+        var added = 0;
+        data.sessions.forEach(function (s) {
+          if (!valid(s)) return;
+          var id = typeof s.id === 'string' && s.id ? s.id : Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          if (have[id]) return;
+          have[id] = true;
+          state.sessions.push({ id: id, start: +s.start, durationSec: +s.durationSec, strokes: Math.max(0, s.strokes | 0), cm: isFinite(s.cm) ? +s.cm : state.strokeCm, meters: +s.meters });
+          added++;
+        });
+        save(); renderStats();
+        toast(added ? 'Imported ' + added + ' session' + (added === 1 ? '' : 's') + '.' : 'No new sessions in that file.');
+      } catch (e) {
+        toast('That file is not a Stroke Odometer backup.');
+      }
+      input.value = '';
+    };
+    r.onerror = function () { toast('Could not read that file.'); input.value = ''; };
+    r.readAsText(f);
+  });
+
+  /* install, storage and offline support */
+  var deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredInstall = e;
+    $('installBtn').hidden = false;
+  });
+  window.addEventListener('appinstalled', function () { deferredInstall = null; $('installBtn').hidden = true; });
+  $('installBtn').addEventListener('click', function () {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    deferredInstall.userChoice.then(function () { deferredInstall = null; $('installBtn').hidden = true; }, function () {});
+  });
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+})();
+</script>
+</body>
+</html>
+
