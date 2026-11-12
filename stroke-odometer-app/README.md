@@ -11,19 +11,23 @@ A private, installable web app. No accounts, no server, no tracking. Everything 
 
 ## Put it online for free
 
-Pick one. All three give you a free web address. Menu names change now and then, so follow the idea if a button looks different.
+Pick one. All four give you a free web address. Menu names change now and then, so follow the idea if a button looks different.
 
-### Option A: Netlify Drop (easiest)
+### Option A: Open 'index.html'
+1. Unzip the folder
+2. Double click on 'index.html'
+
+### Option B: Netlify Drop 
 1. Unzip this folder.
 2. Go to app.netlify.com/drop and drag the whole folder onto the page.
 3. You get a live address straight away. You may be asked for a free account to keep the site.
 
-### Option B: Cloudflare Pages
+### Option C: Cloudflare Pages
 1. Make a free Cloudflare account.
 2. Go to Workers & Pages, create a Pages project, and choose Direct Upload.
 3. Upload this folder. You get an address like `yourname.pages.dev`.
 
-### Option C: GitHub Pages
+### Option D: GitHub Pages
 1. Make a free GitHub account and a new public repository.
 2. Upload every file and folder from here (index.html must sit at the top level).
 3. In the repository's Settings, open Pages and publish from the main branch, root folder.
